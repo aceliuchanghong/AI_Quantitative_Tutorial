@@ -1,0 +1,19 @@
+[project]
+name = "AI_Quantitative_Tutorial"
+version = "0.1.0"
+description = "AI_Quantitative_Tutorial"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "easy-media-utils>=0.1.5",
+    "litserve>=0.2.6",
+    "openai>=1.65.4",
+    "opencv-python>=4.11.0.86",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "termcolor>=2.5.0",
+]
+
+[tool.setuptools]
+py-modules = []
+
