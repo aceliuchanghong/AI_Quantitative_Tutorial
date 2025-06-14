@@ -6,7 +6,7 @@
 
 ```python
 # 依赖安装
-uv run main_server.py
+uv run install.py
 ```
 
 - 环境激活

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "akshare>=1.16.98",
+    "backtrader>=1.9.78.123",
     "easy-media-utils>=0.1.5",
     "litserve>=0.2.6",
     "matplotlib>=3.10.3",
