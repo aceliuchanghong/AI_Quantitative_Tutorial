@@ -17,4 +17,4 @@ if __name__ == "__main__":
     uv run main_server.py
     nohup uv run main_server.py > no_git_oic/main_server.log 2>&1 &
     """
-    logger.info(colored(f"hello", "green"))
+    logger.info(colored(f"hello trader!", "green"))
