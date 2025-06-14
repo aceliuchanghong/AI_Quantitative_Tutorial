@@ -1,10 +1,25 @@
-# AI_Quantitative_Tutorial
+## 基于 510310 ETF（沪深300ETF）的 AI 量化实战
 
+### 项目安装
+
+- 克隆本项目到本地后执行
+
+```python
+# 依赖安装
+uv run main_server.py
+```
+
+- 环境激活
 ```shell
+# 更多依赖安装示例
 uv add akshare -i https://pypi.tuna.tsinghua.edu.cn/simple
+# win 激活
 Set-ExecutionPolicy Bypass -Scope Process -Force
 .venv\Scripts\activate
+# linux 激活
+source .venv/bin/activate
 ```
+
 ### Refernce
 
 - [akshare入门](https://akshare.akfamily.xyz/introduction.html)
