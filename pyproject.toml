@@ -5,6 +5,7 @@ description = "AI_Quantitative_Tutorial"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "akshare>=1.16.98",
     "easy-media-utils>=0.1.5",
     "litserve>=0.2.6",
     "openai>=1.65.4",
