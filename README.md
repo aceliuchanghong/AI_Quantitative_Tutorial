@@ -20,11 +20,37 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 source .venv/bin/activate
 ```
 
+### 常见mapping
+```python
+column_mapping = {
+    "日期": "date",
+    "开盘": "open",
+    "收盘": "close",
+    "最高": "high",
+    "最低": "low",
+    "成交量": "volume",
+    "成交额": "amount",
+    "振幅": "amplitude",
+    "涨跌幅": "change_pct",
+    "涨跌额": "change",
+    "换手率": "turnover",
+    "指数代码": "index_code",
+    "指数名称": "index_name",
+    "指数英文名称": "index_english_name",
+    "成分券代码": "stock_code",
+    "成分券名称": "stock_name",
+    "成分券英文名称": "stock_english_name",
+    "交易所": "exchange",
+    "交易所英文名称": "exchange_english_name",
+}
+```
+
+
 ### Refernce
 
 - [akshare入门](https://akshare.akfamily.xyz/introduction.html)
 - [AI量化交易操盘手](https://github.com/aceliuchanghong/ai_quant_trade)
-- [开源量化交易回测框架，功能丰富、灵活易用](https://github.com/aceliuchanghong/backtrader)
+- [backtrader](https://github.com/aceliuchanghong/backtrader)
 - [中文backtrader开源笔记](https://github.com/aceliuchanghong/learn_backtrader)
 - [中文backtrader开源笔记2](https://github.com/aceliuchanghong/backtrader_other)
 - [backtrader官方文档](https://www.backtrader.com/home/helloalgotrading/)
