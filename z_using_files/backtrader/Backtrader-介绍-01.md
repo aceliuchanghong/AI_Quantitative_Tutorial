@@ -50,6 +50,20 @@ Cerebro
 - **中证500成分股**
   中证500成分股是指中证500指数的构成股票，由中证指数有限公司编制，选取A股市场中剔除沪深300指数成分股及总市值排名前300的股票后，总市值排名靠前的500只中小市值股票组成。这些股票代表中国A股市场中等市值公司的整体表现，覆盖多个行业，流通市值较中小盘股为主。在Backtrader回测中，可使用中证500成分股的历史数据（如通过Yahoo Finance或东方财富获取）进行策略测试，以评估策略在中小市值股票市场中的表现。成分股每半年调整一次（6月和12月），需注意调整对策略的影响。
 
+- **复权**
+  在股票交易中，分红送股、配股、转增股本 等行为会导致股价发生“非市场性”的变化（即不是因为买卖导致的涨跌）。为了更真实地反映股票的历史价格走势，就需要对这些历史价格进行调整，这个过程就叫做 复权 。
+  - 前复权==>以当前最新的收盘价为基准，把以前的所有历史价格都按照分红送股的比例进行调整
+  >某股票在2023年1月1日价格是10元，之后进行了10送10股（也就是1股变2股），那么如果不复权，除权后的价格会变成5元。但用**前复权**处理后，1月1日的价格会被调整成5元，而现在的价格保持不变。
+
+  - 后复权==>以最初的历史价格为基准，把之后所有价格按照分红送股比例调整。
+  >是上面的例子，如果使用**后复权**，则1月1日的价格保持10元不变，而除权后的价格会被调整成10元、11元、12元等，体现的是持有至今的真实收益情况。
+  
+  | 特点 | 前复权 | 后复权 |
+  |------|--------|--------|
+  | 基准点 | 当前价格不变 | 初始价格不变 |
+  | 用途 | 技术分析、K线图观察 | 收益计算、长期回报分析 |
+  | 图形表现 | 看起来像是“连续”的 | 显示出真实的累计涨幅 |
+
 
 #### 通常的回测流程
 
@@ -286,6 +300,145 @@ else:
 使用最新成分股数据，日期为：2025-06-17
 获取到 500 只中证 500 成分股
 [['000009', '中国宝安'], ['000021', '深科技']]
+```
+
+- 500只股票日度行情数据集
+
+```python
+import pandas as pd
+import akshare as ak
+
+column_mapping = {
+    "日期": "date",
+    "开盘": "open",
+    "收盘": "close",
+    "最高": "high",
+    "最低": "low",
+    "成交量": "volume",
+    "成交额": "amount",
+    "振幅": "amplitude",
+    "涨跌幅": "change_pct",
+    "涨跌额": "change",
+    "换手率": "turnover",
+    "指数代码": "index_code",
+    "指数名称": "index_name",
+    "指数英文名称": "index_english_name",
+    "成分券代码": "stock_code",
+    "成分券名称": "stock_name",
+    "成分券英文名称": "stock_english_name",
+    "交易所": "exchange",
+    "交易所英文名称": "exchange_english_name",
+}
+
+def get_daily_data(stock_code, start_date, end_date):
+    """获取单只股票的日频行情数据"""
+    try:
+        # A股日线行情接口
+        df = ak.stock_zh_a_hist(
+            symbol=stock_code,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust="hfq",
+        )
+        df.rename(columns=column_mapping, inplace=True)
+        if len(df) > 0:
+            df["stock_code"] = stock_code
+            return df[
+                [
+                    "date",
+                    "stock_code",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "amount",
+                    "amplitude",
+                    "change_pct",
+                    "change",
+                    "turnover",
+                ]
+            ]
+        else:
+            print(f"{stock_code} 没有获取到数据")
+            return pd.DataFrame()
+    except Exception as e:
+        print(f"获取 {stock_code} 数据失败: {e}")
+        return []
+
+xx = get_daily_data("000009", "20231201", "20250601")
+if len(xx) > 0:
+    print(f"获取到 {xx.shape[0]} 条数据")
+    print(xx.head())
+else:
+    print("没有获取到数据")
+```
+
+```
+获取到 360 条数据
+         date stock_code    open    high     low   close  volume        amount  amplitude  change_pct  change  turnover
+0  2023-12-01     000009  115.04  115.04  112.15  112.25  217638  2.513519e+08       2.53       -1.60   -1.83      0.85
+1  2023-12-04     000009  112.15  114.36  112.15  113.98  178776  2.085234e+08       1.97        1.54    1.73      0.70
+2  2023-12-05     000009  113.60  114.84  113.02  113.50  133102  1.555206e+08       1.60       -0.42   -0.48      0.52
+3  2023-12-06     000009  113.31  114.94  112.92  114.36  161783  1.893744e+08       1.78        0.76    0.86      0.63
+4  2023-12-07     000009  114.08  115.33  113.60  114.94  143561  1.685995e+08       1.51        0.51    0.58      0.56
+```
+
+- 导入 backtrader
+
+```python
+import backtrader as bt  # 导入 Backtrader
+
+# 实例化 cerebro
+cerebro = bt.Cerebro()
+
+# 设置初始资金、佣金和滑点
+cerebro.broker.setcash(100_000_000)
+cerebro.broker.setcommission(commission=0.0003)
+cerebro.broker.set_slippage_perc(0.0001)
+
+# 打印初始资金
+print("Starting Portfolio Value: %.2f" % cerebro.broker.getvalue())
+# 启动回测
+cerebro.run()
+# 打印回测完成后的资金
+print("Final Portfolio Value: %.2f" % cerebro.broker.getvalue())
+```
+
+```
+Starting Portfolio Value: 100000000.00
+Final Portfolio Value: 100000000.00
+```
+
+- 编写交易策略
+
+```python
+
+```
+
+```
+
+```
+
+- 打印回测日志
+
+```python
+
+```
+
+```
+
+```
+
+- 提取回测结果
+
+```python
+
+```
+
+```
+
 ```
 
 
