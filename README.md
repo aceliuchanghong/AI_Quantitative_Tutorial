@@ -51,7 +51,8 @@ column_mapping = {
 - [akshare入门](https://akshare.akfamily.xyz/introduction.html)
 - [AI量化交易操盘手](https://github.com/aceliuchanghong/ai_quant_trade)
 - [backtrader](https://github.com/aceliuchanghong/backtrader)
+- [backtrader的微信教学](https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=2380299870701420545)
 - [中文backtrader开源笔记](https://github.com/aceliuchanghong/learn_backtrader)
 - [中文backtrader开源笔记2](https://github.com/aceliuchanghong/backtrader_other)
-- [backtrader官方文档](https://www.backtrader.com/home/helloalgotrading/)
-- 
+- [Pybroker量化教学](https://github.com/aceliuchanghong/python_data_course)
+-
