@@ -12,6 +12,7 @@ uv run install.py
 - 环境激活
 ```shell
 # 更多依赖安装示例
+uv pip install -U akshare
 uv add akshare -i https://pypi.tuna.tsinghua.edu.cn/simple
 # win 激活
 Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -42,6 +43,14 @@ column_mapping = {
     "成分券英文名称": "stock_english_name",
     "交易所": "exchange",
     "交易所英文名称": "exchange_english_name",
+}
+
+table_mapping = {
+    "cwzbsj": "财务指标数据表",
+    "xjllb": "现金流量表",
+    "zcfzb": "资产负债表",
+    "lrb": "利润表",
+    "stock_daily": "股票每日行情数据表",
 }
 ```
 

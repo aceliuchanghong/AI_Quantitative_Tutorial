@@ -207,13 +207,14 @@ cerebro.plot()
 
 ##### 策略说明
 
+0. 固定好最开始的 500 支股票不变
 1. 按收益率降序排序，选择前 20% 的股票
-2. 在每月最后一个交易日，计算成分股上个月的收益率
+2. 在每月最后一个交易日，计算成分股上个月的收益率(使用**前复权数据**)
 3. 在每月第一个交易日，以开盘价清仓旧持仓并买入新选股
 4. 持仓权重根据流通市值占比分配
 5. 考虑 0.03% 双边佣金和 0.01% 双边滑点
 6. 使用 Backtrader 进行回测，设置初始资金 1 亿元
-7. 添加夏普比率、最大回撤和总回报分析器
+7. 添加年化收益率,交易次数/换手率,夏普比率,最大回撤和总回报分析器
 8. 输出回测结果并可视化净值曲线
 
 | 股票池         | 中证 500 成分股。 |
@@ -224,37 +225,7 @@ cerebro.plot()
 | 总资产         | 100,000,000 元。 |
 | 佣金           | 0.0003 双边。 |
 | 滑点           | 0.0001 双边。 |
-| 策略逻辑       | 选择中证 500 成分股中表现最优的前 20% 的股票作为下一个月的持仓成分股，然后在下个月的第一个交易日，卖出已有持仓，买入新的持仓。 |
-
-- 获取交易日历
-```python
-import pandas as pd
-import akshare as ak
-
-def get_trading_days(start_date, end_date):
-    """使用上证指数获取交易日历"""
-    calendar = ak.stock_zh_index_daily(symbol="sh000001")
-    calendar["date"] = pd.to_datetime(calendar["date"])
-    calendar = calendar[
-        (calendar["date"] >= start_date) & (calendar["date"] <= end_date)
-    ]
-    return calendar["date"].tolist()
-
-trading_days = get_trading_days(
-    pd.to_datetime("2023-12-01"), pd.to_datetime("2025-06-01")
-)
-if not trading_days:
-    print("无法获取交易日历")
-else:
-    print(f"获取到 {len(trading_days)} 个交易日")
-    # 打印前5个交易日
-    print(trading_days[:2])
-```
-
-```
-获取到 360 个交易日
-[Timestamp('2023-12-01 00:00:00'), Timestamp('2023-12-04 00:00:00')]
-```
+| 策略逻辑       | 每次选择中证 500 成分股中表现最优的前 20% 的股票作为下一个月的持仓成分股，然后在下个月的第一个交易日，卖出已有持仓，买入新的持仓。 |
 
 - 获取中证 500 成分股数据
   
@@ -300,6 +271,36 @@ else:
 使用最新成分股数据，日期为：2025-06-17
 获取到 500 只中证 500 成分股
 [['000009', '中国宝安'], ['000021', '深科技']]
+```
+
+- 获取交易日历
+```python
+import pandas as pd
+import akshare as ak
+
+def get_trading_days(start_date, end_date):
+    """使用上证指数获取交易日历"""
+    calendar = ak.stock_zh_index_daily(symbol="sh000001")
+    calendar["date"] = pd.to_datetime(calendar["date"])
+    calendar = calendar[
+        (calendar["date"] >= start_date) & (calendar["date"] <= end_date)
+    ]
+    return calendar["date"].tolist()
+
+trading_days = get_trading_days(
+    pd.to_datetime("2023-12-01"), pd.to_datetime("2025-06-01")
+)
+if not trading_days:
+    print("无法获取交易日历")
+else:
+    print(f"获取到 {len(trading_days)} 个交易日")
+    # 打印前5个交易日
+    print(trading_days[:2])
+```
+
+```
+获取到 360 个交易日
+[Timestamp('2023-12-01 00:00:00'), Timestamp('2023-12-04 00:00:00')]
 ```
 
 - 500只股票日度行情数据集
@@ -414,7 +415,31 @@ Final Portfolio Value: 100000000.00
 - 编写交易策略
 
 ```python
-
+# 通过继承 Strategy 基类，来构建自己的交易策略子类
+class MyStrategy(bt.Strategy):
+    def __init__(self):
+        '''必选，指标的创建、数据的引用、变量的初始化等'''
+        super().__init__()
+        pass
+    def next(self):
+        '''必选，每次接收到新的 Bar (K线) 数据时运行 策略的核心逻辑'''
+        pass
+    def next_open(self):
+        '''可选。当所有数据源都收到新的**开盘价**数据时调用'''
+        pass
+    def log(self, txt, dt=None, doprint=True):
+        '''可选，构建策略打印日志的函数：可用于打印订单记录或交易记录等'''
+        pass
+    def notify_order(self, order):
+        '''可选，打印订单信息'''
+        pass
+    def notify_trade(self, trade):
+        '''可选，打印交易信息'''
+        pass
+    def stop(self):
+        '''
+        可选。回测结束时调用，用于打印最终结果，如最终账户价值等'''
+        pass
 ```
 
 ```
