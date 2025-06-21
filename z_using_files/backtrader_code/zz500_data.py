@@ -59,7 +59,7 @@ def get_trading_days(start_date, end_date):
     return calendar["date"].tolist()
 
 
-@cache_to_sqlite()
+@cache_to_sqlite(debug=False)
 def get_daily_data(stock_code, start_date, end_date, adjust="qfq"):
     """获取单只股票的日频行情数据"""
     try:
@@ -139,8 +139,7 @@ if __name__ == "__main__":
         if df.empty:
             print(f"{stock_code} 没有获取到数据")
         else:
-            print(f"{stock_code} 获取到 {len(df)} 条数据")
-            print(df.head(2))
+            pass
 
     trading_days = get_trading_days(
         pd.to_datetime(start_data), pd.to_datetime(end_data)

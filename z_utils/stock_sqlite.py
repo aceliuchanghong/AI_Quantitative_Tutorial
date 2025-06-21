@@ -57,7 +57,7 @@ def get_params_hash(params):
     return hashlib.md5(params_str.encode()).hexdigest()
 
 
-def query_cache(conn, function_name, params):
+def query_cache(conn, function_name, params, debug=True):
     """根据函数名和参数哈希查询缓存"""
     try:
         params_hash = get_params_hash(params)
@@ -72,7 +72,8 @@ def query_cache(conn, function_name, params):
         result = c.fetchone()
         if result:
             result_data, data_count, data_type = result
-            print(colored(f"{function_name} 函数缓存命中，参数: {params}", "green"))
+            if debug:
+                print(colored(f"{function_name} 函数缓存命中，参数: {params}", "green"))
             # 根据存储时的数据类型，反序列化数据
             if data_type == "dataframe":
                 return pd.read_json(StringIO(result_data)), data_count
@@ -119,7 +120,7 @@ def save_to_cache(conn, function_name, params, result_data, data_count):
         raise
 
 
-def cache_to_sqlite(db_name="stock_data.db", default_return=None):
+def cache_to_sqlite(db_name="stock_data.db", default_return=None, debug=True):
     """
     装饰器：自动为函数添加数据库缓存功能。
     支持自定义数据库名称和函数执行失败时的默认返回值。
@@ -146,7 +147,9 @@ def cache_to_sqlite(db_name="stock_data.db", default_return=None):
                 return default_return
 
             # 2. 查询缓存
-            cached_data, data_count = query_cache(conn, function_name, params)
+            cached_data, data_count = query_cache(
+                conn, function_name, params, debug=debug
+            )
             if cached_data is not None:
                 conn.close()
                 return cached_data
