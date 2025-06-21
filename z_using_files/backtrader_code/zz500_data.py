@@ -61,10 +61,11 @@ def get_trading_days(start_date, end_date):
 
 @cache_to_sqlite(debug=False)
 def get_daily_data(stock_code, start_date, end_date, adjust="qfq"):
-    """获取单只股票的日频行情数据"""
+    """
+    获取单只股票的日频行情数据
+    日期 股票代码 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率
+    """
     try:
-        # A股日线行情接口
-        # 输出:日期 股票代码 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率
         df = ak.stock_zh_a_hist(
             symbol=stock_code,
             period="daily",
@@ -123,6 +124,7 @@ if __name__ == "__main__":
     # uv run z_using_files/backtrader_code/zz500_data.py
     start_data, end_data = "2023-01-01", "2025-06-01"
     adjust = "qfq"
+    all_stock_daily = pd.DataFrame()
 
     stocks = get_csi500_stocks(date=start_data)
     if stocks is None or len(stocks) == 0:
@@ -139,7 +141,8 @@ if __name__ == "__main__":
         if df.empty:
             print(f"{stock_code} 没有获取到数据")
         else:
-            pass
+            all_stock_daily = pd.concat([all_stock_daily, df], ignore_index=True)
+    print(f"all_stock_daily.shape:{all_stock_daily.shape}")
 
     trading_days = get_trading_days(
         pd.to_datetime(start_data), pd.to_datetime(end_data)

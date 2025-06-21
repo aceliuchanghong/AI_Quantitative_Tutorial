@@ -244,6 +244,78 @@ PyBroker的核心特点
 
 ---
 
+针对下面回测策略
+
+获取数据样例:
+`stocks[:2]`样例:[['000009', '中国宝安'], ['000021', '深科技']]
+`all_stock_daily shape`==>all_stock_daily:(288438, 12),其中12是:日期 股票代码 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率
+`trading_days[:2]`==>['2023-01-03T00:00:00', '2023-01-04T00:00:00']
+first_days_list[:2]:
+[Timestamp('2023-01-03 00:00:00'), Timestamp('2023-02-01 00:00:00')]
+last_days_list[:2]:
+[Timestamp('2023-01-31 00:00:00'), Timestamp('2023-02-28 00:00:00')]
+
+```python
+if __name__ == "__main__":
+    # uv run z_using_files/backtrader_code/zz500_data.py
+    start_data, end_data = "2023-01-01", "2025-06-01"
+    adjust = "qfq"
+    all_stock_daily = pd.DataFrame()
+
+    stocks = get_csi500_stocks(date=start_data)
+    if stocks is None or len(stocks) == 0:
+        print("无法获取中证500成分股")
+    else:
+        print(f"获取到 {len(stocks)} 只中证500成分股")
+        print(stocks[:2])
+
+    for stock in stocks:
+        stock_code = stock[0]
+        df = get_daily_data(
+            stock_code, start_data.replace("-", ""), end_data.replace("-", ""), adjust
+        )
+        if df.empty:
+            print(f"{stock_code} 没有获取到数据")
+        else:
+            all_stock_daily = pd.concat([all_stock_daily, df], ignore_index=True)
+    print(f"all_stock_daily shape:{all_stock_daily.shape}")
+
+    trading_days = get_trading_days(
+        pd.to_datetime(start_data), pd.to_datetime(end_data)
+    )
+    print(f"获取到 {len(trading_days)} 个交易日")
+    print(trading_days[:2])
+    first_days_list, last_days_list = get_monthly_first_last_trading_days(trading_days)
+    print("每月第一个交易日:")
+    print(first_days_list[:2])
+    print("每月最后一个交易日:")
+    print(last_days_list[:2])
+```
+
+- 回测策略
+```
+0. 固定好最开始的 500 支股票不变
+1. 按收益率降序排序，选择前 20% 的股票
+2. 在每月最后一个交易日，计算成分股上个月的收益率(使用**前复权数据**)
+3. 在每月第一个交易日，以开盘价清仓旧持仓并买入新选股
+4. 持仓权重根据上月收益率加权数据分配
+5. 考虑 0.03% 双边佣金和 0.01% 双边滑点
+6. 使用 Backtrader 进行回测，设置初始资金 1 亿元
+7. 添加年化收益率,交易次数/换手率,夏普比率,最大回撤和总回报分析器
+8. 输出回测结果并可视化净值曲线
+
+| 股票池         | 中证 500 成分股。 |
+|----------------|--------------------|
+| 回测区间       | 2023-12-01 至 2025-06-01。 |
+| 持仓周期       | 月度调仓，每月第一个交易日，以开盘价买入或卖出。 |
+| 持仓权重       | 流通市值占比。 |
+| 总资产         | 100,000,000 元。 |
+| 佣金           | 0.0003 双边。 |
+| 滑点           | 0.0001 双边。 |
+| 策略逻辑       | 每次选择中证 500 成分股中表现最优的前 20% 的股票作为下一个月的持仓成分股，然后在下个月的第一个交易日，卖出已有持仓，买入新的持仓。 |
+```
+
+帮我完成回测的编写,基于backtrader
 
 
 

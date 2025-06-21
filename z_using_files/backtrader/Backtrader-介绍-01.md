@@ -208,20 +208,19 @@ cerebro.plot()
 ##### 策略1说明
 
 0. 固定好最开始的 500 支股票不变
-1. 按收益率降序排序，选择前 20% 的股票
+1. 按收益率降序排序，最开始选择 2023-01 收益前 20% 的股票
 2. 在每月最后一个交易日，计算成分股上个月的收益率(使用**前复权数据**)
 3. 在每月第一个交易日，以开盘价清仓旧持仓并买入新选股
-4. 持仓权重根据流通市值占比==>上月收益率加权==>最大化夏普比率 分配
+4. 持仓权重根据上月收益率加权数据分配
 5. 考虑 0.03% 双边佣金和 0.01% 双边滑点
-6. 使用 Backtrader 进行回测，设置初始资金 1 亿元
-7. 添加年化收益率,交易次数/换手率,夏普比率,最大回撤和总回报分析器
-8. 输出回测结果并可视化净值曲线
+6. 添加年化收益率,交易次数/换手率,夏普比率,最大回撤和总回报分析器
+7. 输出回测结果并可视化净值曲线
 
 | 股票池         | 中证 500 成分股。 |
 |----------------|--------------------|
-| 回测区间       | 2023-12-01 至 2025-06-01。 |
+| 回测区间       | 2023-02-01 至 2025-06-01。 |
 | 持仓周期       | 月度调仓，每月第一个交易日，以开盘价买入或卖出。 |
-| 持仓权重       | 流通市值占比。 |
+| 持仓权重       | 上月收益率加权 |
 | 总资产         | 100,000,000 元。 |
 | 佣金           | 0.0003 双边。 |
 | 滑点           | 0.0001 双边。 |
@@ -467,32 +466,160 @@ class MyStrategy(bt.Strategy):
         pass
 ```
 
-```python
+---
 
+#### 策略一开始回测
+
+```python
+class MonthlyStrategy(bt.Strategy):
+    """
+    月度动量策略
+    1. 在每月最后一个交易日，计算过去一个月的收益率
+    2. 筛选出收益率排名前20%的股票
+    3. 根据收益率进行加权，作为新持仓的目标权重
+    4. 在下一个交易日（即下月第一个交易日）以开盘价执行调仓
+    """
+
+    params = (
+        ("top_n_percent", 0.20),  # 选择前20%
+        ("rebalance_dates", None),  # 传入每月最后一个交易日列表
+        ("lookback_period", 20),  # 代表约一个月的交易日
+    )
+
+    def __init__(self):
+        super().__init__()
+        # 将传入的 pandas Timestamps 转换为 python datetime.date 对象，便于比较
+        self.rebalance_dates = [
+            d.to_pydatetime().date() for d in self.p.rebalance_dates
+        ]
+
+        # 核心修改：引入状态标志位和目标持仓字典
+        self.rebalance_due = False  # 是否有待执行的调仓任务
+        self.target_weights = {}  # 储存计算出的目标权重
+
+        # 使用 self.datetime 访问当前时间点
+        self.datetime = self.datas[0].datetime
+
+    def next(self):
+        # 获取当前的回测日期
+        current_date = self.datetime.date(0)
+
+        # --- 1. 交易执行模块 ---
+        # 检查是否有待处理的调仓任务。
+        # 这个模块总是在信号生成模块之前，确保在计算新信号前，完成上一期的交易。
+        if self.rebalance_due:
+            print(f"--- {current_date}: 执行调仓 ---")
+
+            # 获取当前持仓的股票代码集合
+            current_holdings = {
+                d._name for d, pos in self.getpositions().items() if pos.size > 0
+            }
+
+            # 获取目标持仓的股票代码集合
+            target_stocks = set(self.target_weights.keys())
+
+            # 卖出：当前持有但不在目标中的股票，仓位调整为0
+            stocks_to_sell = current_holdings - target_stocks
+            for stock_code in stocks_to_sell:
+                data = self.getdatabyname(stock_code)
+                self.order_target_percent(data=data, target=0.0)
+                print(f"  [清仓] {stock_code}")
+
+            # 买入/调仓：目标持仓中的股票，调整至目标权重
+            # 这也会自动处理从较低权重调整到较高权重的情况
+            for stock_code, weight in self.target_weights.items():
+                data = self.getdatabyname(stock_code)
+                self.order_target_percent(data=data, target=weight)
+                print(f"  [买入/调仓] {stock_code}, 目标权重: {weight:.4f}")
+
+            # 任务完成，重置标志位和目标权重
+            self.rebalance_due = False
+            self.target_weights.clear()
+            return  # 当天执行完交易后，不再做其他操作
+
+        # --- 2. 信号生成模块 ---
+        # 检查今天是否是需要计算信号的调仓准备日（即每月的最后一个交易日）
+        if current_date in self.rebalance_dates:
+            print(f"--- {current_date}: 计算下月持仓信号 ---")
+
+            # 1. 计算所有股票的动量（上月回报）
+            returns = {}
+            for d in self.datas:
+                # 确保数据长度足够进行计算
+                if len(d) > self.p.lookback_period:
+                    try:
+                        # (今日收盘 / N日前收盘) - 1
+                        momentum = (d.close[0] / d.close[-self.p.lookback_period]) - 1
+                        returns[d._name] = momentum
+                    except IndexError:
+                        # 理论上 len(d) 检查后不会触发，但作为保险
+                        continue
+
+            if not returns:
+                print("警告：没有足够的数据来计算回报。")
+                return
+
+            # 2. 降序排序并选择前 N% 的股票
+            sorted_stocks = sorted(returns.items(), key=lambda x: x[1], reverse=True)
+            top_n = int(len(sorted_stocks) * self.p.top_n_percent)
+
+            # 筛选出收益率排名前列的股票，并且只保留正收益的股票进行加权
+            top_performers = [item for item in sorted_stocks[:top_n] if item[1] > 0]
+
+            if not top_performers:
+                print(
+                    f"警告：在 {current_date}，排名前 {self.p.top_n_percent:.0%} 的股票均为负收益，将执行空仓。"
+                )
+                self.target_weights.clear()  # 确保目标为空
+                self.rebalance_due = True  # 设置标志，以便下一天卖出所有现有持仓
+                return
+
+            # 3. 计算收益率加权
+            positive_return_sum = sum(r for d, r in top_performers)
+
+            # 临时存储计算出的权重
+            temp_weights = {}
+            if positive_return_sum > 0:
+                for d_name, r in top_performers:
+                    temp_weights[d_name] = r / positive_return_sum
+
+            # 4. 保存计算结果，并设置标志位以便下一天执行
+            if temp_weights:
+                self.target_weights = temp_weights
+                self.rebalance_due = True  # 核心：设置调仓标志！
+                print(
+                    f"信号生成完毕，准备在下一个交易日调仓。选出 {len(self.target_weights)} 只股票。"
+                )
+
+    def stop(self):
+        print("--- 回测结束 ---")
+        print(f"最终资产价值: {self.broker.getvalue():,.2f}")
 ```
 
 - 打印回测日志
 
-```python
+```
+--- 回测结束 ---
+最终资产价值: 89,628,114.29
 
+=============== 回测结果分析 ===============
+回测区间: 2023-02-01 to 2025-06-01
+初始资产: 100,000,000.00
+最终资产: 89,628,114.29
+总回报率: -10.37%
+年化收益率: -4.77%
+最大回撤: 25.41%
+年化夏普比率 (无风险利率 2%): -0.2052
+总交易次数: 887
+总交易额: 15,656,298.89
+估算月均换手率: 0.60%
 ```
 
-```
-
-```
-
-- 提取回测结果
-
-```python
-
-```
-
-```
-
-```
+- 回测结果
 
 
-#### 展望
+
+### 展望
 
 很多细节未做深入讲解,下一节继续
 

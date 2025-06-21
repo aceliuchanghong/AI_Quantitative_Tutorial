@@ -120,67 +120,76 @@ def save_to_cache(conn, function_name, params, result_data, data_count):
         raise
 
 
-def cache_to_sqlite(db_name="stock_data.db", default_return=None, debug=True):
+def cache_to_sqlite(
+    db_name="stock_data.db", default_return=None, debug=True, re_run=False
+):
     """
     装饰器：自动为函数添加数据库缓存功能。
-    支持自定义数据库名称和函数执行失败时的默认返回值。
     """
 
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            # 自动获取被装饰的函数名
+            # re_run 的值直接从外部函数作用域获取，无需再处理 kwargs
             function_name = func.__name__
 
-            # 构造参数字典，将位置参数和关键字参数统一处理
             params = kwargs.copy()
             if args:
-                # 为了更准确地将位置参数和其名称对应，我们获取函数的参数名
                 arg_names = func.__code__.co_varnames[: len(args)]
                 params.update(dict(zip(arg_names, args)))
 
-            # 1. 初始化数据库连接
             try:
                 conn = init_db(db_name)
             except Exception as e:
                 print(colored(f"数据库初始化失败: {str(e)}", "red"))
                 return default_return
 
-            # 2. 查询缓存
-            cached_data, data_count = query_cache(
-                conn, function_name, params, debug=debug
-            )
-            if cached_data is not None:
-                conn.close()
-                return cached_data
+            # 只有当装饰器参数 re_run 为 False 时，才尝试从缓存中查询
+            if not re_run:
+                cached_data, data_count = query_cache(
+                    conn, function_name, params, debug=debug
+                )
+                if cached_data is not None:
+                    conn.close()
+                    return cached_data
+            elif debug:
+                print(
+                    colored(
+                        f"装饰器设置了 re_run=True, 强制重新运行 {function_name}, 参数: {params}",
+                        "blue",
+                    )
+                )
 
-            # 3. 如果缓存未命中，则执行原函数
+            # 如果缓存未命中或 re_run=True，则执行原函数
             try:
                 result = func(*args, **kwargs)
-                # 如果函数返回空结果，则不缓存，直接返回
+
                 if result is None or (
                     isinstance(result, (pd.DataFrame, list)) and len(result) == 0
                 ):
                     conn.close()
-                    print(
-                        colored(
-                            f"{function_name} 返回空结果，不进行缓存，参数: {params}",
-                            "yellow",
+                    if debug:
+                        print(
+                            colored(
+                                f"{function_name} 返回空结果，不进行缓存，参数: {params}",
+                                "yellow",
+                            )
                         )
-                    )
                     return result
 
-                # 4. 计算数据量并保存到缓存
+                # 计算数据量并保存/更新到缓存
                 data_count = (
                     len(result) if isinstance(result, (pd.DataFrame, list)) else 1
                 )
                 save_to_cache(conn, function_name, params, result, data_count)
-                print(
-                    colored(f"{function_name} 执行成功，数据量: {data_count}", "green")
-                )
+                if debug:
+                    print(
+                        colored(
+                            f"{function_name} 执行成功，数据量: {data_count}", "green"
+                        )
+                    )
                 return result
             except Exception as e:
-                # 如果函数执行出错，打印详细错误信息
                 error_msg = (
                     f"函数 {function_name} 执行失败，参数: {params}\n"
                     f"错误详情:\n{traceback.format_exc()}"
@@ -188,7 +197,6 @@ def cache_to_sqlite(db_name="stock_data.db", default_return=None, debug=True):
                 print(colored(error_msg, "red"))
                 return default_return
             finally:
-                # 确保数据库连接总是被关闭
                 if conn:
                     conn.close()
 
