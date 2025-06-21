@@ -53,6 +53,7 @@ def get_daily_data(stock_code, start_date, end_date):
     """获取单只股票的日频行情数据"""
     try:
         # A股日线行情接口
+        # 输出:日期 股票代码 开盘 收盘 最高 最低 成交量 成交额 振幅 涨跌幅 涨跌额 换手率
         df = ak.stock_zh_a_hist(
             symbol=stock_code,
             period="daily",
@@ -60,6 +61,7 @@ def get_daily_data(stock_code, start_date, end_date):
             end_date=end_date,
             adjust="hfq",
         )
+        # print(f"{df.head()}")
         df.rename(columns=column_mapping, inplace=True)
         if len(df) > 0:
             df["stock_code"] = stock_code
