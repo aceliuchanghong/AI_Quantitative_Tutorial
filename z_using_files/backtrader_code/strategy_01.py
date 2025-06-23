@@ -46,10 +46,15 @@ class MonthlyStrategy(bt.Strategy):
 
         # 使用 self.datetime 访问当前时间点
         self.datetime = self.datas[0].datetime
+        # 存储 (日期, 总资产) 元组
+        self.value_history = []
 
     def next(self):
         # 获取当前的回测日期
         current_date = self.datetime.date(0)
+
+        # 记录当前日期和总资产
+        self.value_history.append((current_date, self.broker.getvalue()))
 
         # --- 1. 交易执行模块 ---
         # 检查是否有待处理的调仓任务。
@@ -85,7 +90,7 @@ class MonthlyStrategy(bt.Strategy):
             return  # 当天执行完交易后，不再做其他操作
 
         # --- 2. 信号生成模块 ---
-        # 检查今天是否是需要计算信号的调仓准备日（即每月的最后一个交易日）
+        # 在每月最后一个交易日，计算过去一个月收益率，选出股票，并按收益率加权分配权重。
         if current_date in self.rebalance_dates:
             print(f"--- {current_date}: 计算下月持仓信号 ---")
 
@@ -133,7 +138,7 @@ class MonthlyStrategy(bt.Strategy):
             # 4. 保存计算结果，并设置标志位以便下一天执行
             if temp_weights:
                 self.target_weights = temp_weights
-                self.rebalance_due = True  # 核心：设置调仓标志！
+                self.rebalance_due = True  # 设置调仓标志
                 print(
                     f"信号生成完毕，准备在下一个交易日调仓。选出 {len(self.target_weights)} 只股票。"
                 )
@@ -200,8 +205,21 @@ if __name__ == "__main__":
     print(colored(f"2.1 正在向 Backtrader 添加数据...", "light_yellow"))
     all_stock_daily["date"] = pd.to_datetime(all_stock_daily["date"])
 
+    # 过滤掉数据不完整的股票
+    min_date_required = pd.to_datetime(backtest_start_date)
+    # 按股票代码分组，计算每只股票的最小日期
+    start_dates = all_stock_daily.groupby("stock_code")["date"].min()
+    # 找出那些开始日期晚于我们要求的最小日期的股票
+    valid_stocks = start_dates[start_dates < min_date_required].index
+    # 只使用这些有效的股票进行回测
+    stock_codes_in_universe = valid_stocks
+
+    print(
+        f"原始股票数量: {len(all_stock_daily['stock_code'].unique())}, 筛选后剩余: {len(stock_codes_in_universe)}, 去除那些开始日期晚于我们要求的最小日期的股票"
+    )
+
     # 获取回测区间内的股票代码
-    stock_codes_in_universe = all_stock_daily["stock_code"].unique()
+    # stock_codes_in_universe = all_stock_daily["stock_code"].unique()
 
     for stock_code in stock_codes_in_universe:
         df = all_stock_daily[all_stock_daily["stock_code"] == stock_code].copy()
@@ -210,7 +228,16 @@ if __name__ == "__main__":
         df.sort_values(by="date", inplace=True)
         df.set_index("date", inplace=True)
 
+        if not df.empty:
+            # print(
+            #     f"正在添加股票: {stock_code}, 数据范围: {df.index.min().date()} to {df.index.max().date()}"
+            # )
+            pass
+        else:
+            print(colored(f"警告: 股票 {stock_code} 的数据为空!", "red"))
+
         # 添加 backtrader 不要求但最好有的 openinterest 列
+        # peninterest 的中文意思是 未平仓合约量
         df["openinterest"] = 0
 
         # 创建数据源
@@ -298,22 +325,39 @@ if __name__ == "__main__":
     print(f"估算月均换手率: {turnover_rate:.2%}")
 
     import matplotlib
+    import matplotlib.pyplot as plt
 
-    matplotlib.use("Agg")
-    figures = cerebro.plot(
-        style="candlestick",
-        barup="red",
-        bardown="green",
-        plot=False,
-        # numfigs=1,
-        # iplot=False,
-    )
-    print(f"figures: {figures}")
-    filename = "backtest_strategy_01.png"
-    if figures and figures[0]:
-        fig = figures[0][0]
-        fig.set_size_inches(18.5, 10.5)
-        print(f"图表将保存为: {filename}")
-        fig.savefig(filename, dpi=300)
+    # 提取资产历史数据
+    value_history = strat.value_history
+    # print(f"{value_history}")
+    if not value_history:
+        print("没有记录资产历史数据，请检查策略代码。")
     else:
-        print("未能生成图表，无法保存。")
+        # 转换为 DataFrame
+        df_values = pd.DataFrame(value_history, columns=["date", "portfolio_value"])
+        df_values["date"] = pd.to_datetime(df_values["date"])
+        df_values.set_index("date", inplace=True)
+
+        # 绘制净值曲线
+        try:
+            print("开始绘制净值曲线...")
+            matplotlib.use("Agg")  # 非交互式后端
+            plt.figure(figsize=(10, 6))
+            plt.plot(
+                df_values.index,
+                df_values["portfolio_value"],
+                label="Portfolio Value",
+                color="blue",
+            )
+            plt.title("Portfolio Value Over Time")
+            plt.xlabel("Date")
+            plt.ylabel("Portfolio Value (CNY)")
+            plt.grid(True)
+            plt.legend()
+            os.makedirs("output", exist_ok=True)
+            plot_path = os.path.join("output", "portfolio_value_plot.png")
+            plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            print(f"净值曲线已保存到 {plot_path}")
+        except Exception as e:
+            print(f"绘制净值曲线失败: {str(e)}")
