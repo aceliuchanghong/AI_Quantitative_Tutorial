@@ -637,7 +637,7 @@ class MonthlyStrategy(bt.Strategy):
 
 - 回测结果
 
-![portfolio_value_strategy_01](../pics/portfolio_value_strategy_01.png)
+![portfolio_value_strategy_01](../pics/portfolio_value_plot.png)
 
 
 ### 展望

@@ -176,9 +176,7 @@ class TestStrategy(bt.Strategy):
 
 #### 5. 成交量限制管理
 
-
 #### 6. 交易时机管理
-
 
 ### Refernce
 
