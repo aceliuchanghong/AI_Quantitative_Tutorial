@@ -648,5 +648,6 @@ class MonthlyStrategy(bt.Strategy):
 
 ### Refernce
 
-- [Backtrader来了](https://mp.weixin.qq.com/s/7S4AnbUfQy2kCZhuFN1dZw)
+- [Backtrader来了](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzAxNTc0Mjg0Mg==&action=getalbum&album_id=2380299870701420545)
+- [Backtrader-01](https://mp.weixin.qq.com/s/7S4AnbUfQy2kCZhuFN1dZw)
 - 
