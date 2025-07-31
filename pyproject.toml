@@ -16,6 +16,7 @@ dependencies = [
     "requests>=2.32.3",
     "ta>=0.11.0",
     "termcolor>=2.5.0",
+    "yfinance>=0.2.65",
 ]
 
 [tool.setuptools]

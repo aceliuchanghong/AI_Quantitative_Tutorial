@@ -130,11 +130,10 @@ def save_to_cache(conn, function_name, params, result_data, data_count):
 
 
 def cache_to_sqlite(
-    db_name="stock_data.db", default_return=None, debug=True, re_run=False
+    db_name="stock_data.db", default_return=None, debug=False, re_run=False
 ):
     """
     装饰器：自动为【同步】函数添加数据库缓存功能。
-    此版本能正确处理实例方法和普通函数。
     """
 
     def decorator(func):
@@ -201,9 +200,15 @@ def cache_to_sqlite(
                 result = func(*args, **kwargs)
 
                 # 检查空结果的逻辑可以稍微优化，同时处理 dict
-                if result is None or (
-                    isinstance(result, (pd.DataFrame, list, dict)) and not result
-                ):
+                is_result_empty = False
+                if result is None:
+                    is_result_empty = True
+                elif isinstance(result, pd.DataFrame):
+                    is_result_empty = result.empty  # 对DataFrame使用.empty属性
+                elif isinstance(result, (list, dict)):
+                    is_result_empty = not result  # 对list和dict，'not'可以正常工作
+
+                if is_result_empty:
                     if debug:
                         print(
                             colored(
@@ -246,11 +251,10 @@ def cache_to_sqlite(
 
 
 def cache_to_sqlite_async(
-    db_name="stock_data.db", default_return=None, debug=True, re_run=False
+    db_name="stock_data.db", default_return=None, debug=False, re_run=False
 ):
     """
     装饰器：专门为【异步】函数添加数据库缓存功能。
-    此版本能正确处理实例方法和普通函数。
     """
 
     def decorator(func):
@@ -316,10 +320,15 @@ def cache_to_sqlite_async(
                 # 执行原始函数时，必须使用完整的原始 *args，因为它包含 self
                 result = await func(*args, **kwargs)
 
-                # ... (后续的缓存保存和错误处理逻辑保持不变) ...
-                if result is None or (
-                    isinstance(result, (pd.DataFrame, list, dict)) and not result
-                ):
+                is_result_empty = False
+                if result is None:
+                    is_result_empty = True
+                elif isinstance(result, pd.DataFrame):
+                    is_result_empty = result.empty  # 对DataFrame使用.empty属性
+                elif isinstance(result, (list, dict)):
+                    is_result_empty = not result  # 对list和dict，'not'可以正常工作
+
+                if is_result_empty:
                     if debug:
                         print(
                             colored(
