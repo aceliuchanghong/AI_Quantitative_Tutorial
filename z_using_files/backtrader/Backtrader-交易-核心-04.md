@@ -208,4 +208,95 @@ cerebro.broker.set_slippage_fixed(fixed=0.35,
 
 ### 交易税费管理
 
+交易时是否考虑交易费用对回测的结果影响很大，所以在回测是通常会设置交易税费，不同标的的费用收取规则也各不相同。
 
+
+#### 股票
+
+目前 A 股的交易费用分为 2 部分：佣金和印花税。
+
+  - **佣金**：双边征收，不同证券公司收取的佣金各不相同，一般在 0.02%-0.03% 左右，单笔佣金不少于 5 元。
+  - **印花税**：只在卖出时收取，税率为 0.1%。
+
+#### 期货
+
+期货交易费用包括交易所收取手续费和期货公司收取佣金 2 部分。
+
+  - **交易所手续费**：较为固定。
+  - **期货公司佣金**：不一致，且不同期货品种的收取方式不相同，有的按照固定费用收取，有的按成交金额的固定百分比收取（计算公式：`合约现价 * 合约乘数 * 手续费费率`）。
+  - **保证金**：除了交易费用外，期货交易时还需上交一定比例的保证金。
+
+
+Backtrader 提供了多种交易费设置方式，既可以简单的通过参数进行设置，也可以结合交易条件自定义费用函数。
+
+#### 交易费用模式
+
+  - **股票 (Stock-like) 模式**: 对应 **PERC 百分比费用模式**。
+  - **期货 (Futures-like) 模式**: 对应 **FIXED 固定费用模式**。
+
+#### 核心参数
+
+在设置交易费用时，最常涉及如下 3 个参数：
+
+  - `commission`：手续费 / 佣金。
+  - `mult`：乘数。
+  - `margin`：保证金 / 保证金比率。
+
+**双边征收**：买入和卖出操作都要收取相同的交易费用。
+
+
+#### 1. 通过 `BackBroker()` 设置
+
+`BackBroker` 中有一个 `commission` 参数，用来全局设置交易手续费。如果是股票交易，可以简单的通过该方式设置交易佣金。
+
+```python
+# 设置 0.0002 = 0.02% 的手续费
+cerebro.broker = bt.brokers.BackBroker(commission=0.0002)
+```
+
+#### 2. 通过 `setcommission()` 设置
+
+如果想要完整又方便的设置交易费用，可以调用 broker 的 `setcommission()` 方法，该方法基本上可以满足大部分的交易费用设置需求。
+
+```python
+cerebro.broker.setcommission(
+    # 交易手续费，根据margin取值情况区分是百分比手续费还是固定手续费
+    commission=0.0,
+    # 期货保证金，决定着交易费用的类型,只有在stocklike=False时起作用
+    margin=None,
+    # 乘数，盈亏会按该乘数进行放大
+    mult=1.0,
+    # 交易费用计算方式，取值有：
+    # 1. CommInfoBase.COMM_PERC 百分比费用
+    # 2. CommInfoBase.COMM_FIXED 固定费用
+    # 3. None 根据 margin 取值来确定类型
+    commtype=None,
+    # 当交易费用处于百分比模式下时，commission 是否为 % 形式
+    # True，表示不以 % 为单位，0.XX 形式；False，表示以 % 为单位，XX% 形式
+    percabs=True,
+    # 是否为股票模式，该模式通常由margin和commtype参数决定
+    # margin=None或COMM_PERC模式时，就会stocklike=True，对应股票手续费；
+    # margin设置了取值或COMM_FIXED模式时,就会stocklike=False，对应期货手续费
+    stocklike=False,
+    # 计算持有的空头头寸的年化利息
+    # days * price * abs(size) * (interest / 365)
+    interest=0.0,
+    # 计算持有的多头头寸的年化利息
+    interest_long=False,
+    # 杠杆比率，交易时按该杠杆调整所需现金
+    leverage=1.0,
+    # 自动计算保证金
+    # 如果False,则通过margin参数确定保证金
+    # 如果automargin<0,通过mult*price确定保证金
+    # 如果automargin>0,如果automargin*price确定保证金
+    automargin=False,
+    # 交易费用设置作用的数据集(也就是作用的标的)
+    # 如果取值为None，则默认作用于所有数据集(也就是作用于所有assets)
+    name=None
+)
+```
+
+从上述各参数的含义和作用可知，`margin`、`commtype`、`stocklike` 存在 2 种默认的配置规则：
+
+1.  **股票百分比费用**：未设置 `margin`（即 `margin` 为 `0` / `None` / `False`）→ `commtype` 会指向 `COMM_PERC` 百分比费用 → 底层的 `_stocklike` 属性会设置为 `True`。所以如果想为股票设置交易费用，就令 `margin = 0 / None / False`，或者令 `stocklike=True`。
+2.  **期货固定费用**：为 `margin` 设置了取值 → `commtype` 会指向 `COMM_FIXED` 固定费用 → 底层的 `_stocklike` 属性会设置为 `False`。所以如果想为期货设置交易费用，就需要设置 `margin`，此外还需令 `stocklike=False`，`margin` 参数才会起作用。
