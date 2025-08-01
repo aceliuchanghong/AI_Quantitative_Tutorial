@@ -98,7 +98,7 @@ def get_a_share_stock_list():
         return None
 
 
-@cache_to_sqlite(debug=False)
+@cache_to_sqlite()
 def get_trading_days(start_date, end_date):
     """获取交易日历"""
     calendar = ak.stock_zh_index_daily(symbol="sh000001")
@@ -244,7 +244,7 @@ def get_daily_data_yfinance(
         return pd.DataFrame()
 
 
-@cache_to_sqlite(debug=False, re_run=False)
+@cache_to_sqlite()
 @set_proxy()
 def get_intraday_data_for_date(
     stock_code: str, input_date: str, interval: str = "1m"
