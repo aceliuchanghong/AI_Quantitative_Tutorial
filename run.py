@@ -39,7 +39,7 @@ def draw_pics(
     if not today:
         date_list = get_trading_days(start_date, end_date)
         for today in date_list:
-            today_df = get_intraday_data_for_date(stock_code, today)
+            today_df = get_intraday_data_for_date(stock_code, today, _re_run=rerun)
             if len(today_df) > 0:
                 trade_df.append(today_df)
     else:

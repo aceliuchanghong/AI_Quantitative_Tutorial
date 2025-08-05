@@ -332,6 +332,9 @@ def get_intraday_data_for_date(
             progress=False,
             auto_adjust=False,  # 保留 'Adj Close'
         )
+        import time
+
+        time.sleep(2)
 
         if df.empty:
             # 这个提示很正常，可能是非交易日
