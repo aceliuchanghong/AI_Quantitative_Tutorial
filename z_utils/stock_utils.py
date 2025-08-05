@@ -112,6 +112,38 @@ def get_trading_days(start_date, end_date):
     return trading_days.dt.strftime("%Y-%m-%d").tolist()
 
 
+def get_akshare_symbol(stock_code: str) -> str:
+    """
+    根据A股股票代码判断并返回akshare所需的symbol格式。
+    上海证券交易所的股票代码以'6'开头，前面需要加上'sh'。
+    深圳证券交易所的股票代码以'0'或'3'开头，前面需要加上'sz'。
+
+    Args:
+        stock_code (str): 6位数的A股股票代码。
+
+    Returns:
+        str: 适用于akshare的股票代码 (e.g., 'sh600519')。
+
+    Raises:
+        ValueError: 如果股票代码不是一个有效的6位数字字符串 或者不是以上海'6'或深圳'0'、'3'开头。
+    """
+    if (
+        not isinstance(stock_code, str)
+        or not stock_code.isdigit()
+        or len(stock_code) != 6
+    ):
+        raise ValueError(f"无效的股票代码格式: '{stock_code}'。应为6位数字字符串。")
+
+    if stock_code.startswith("6"):
+        return f"sh{stock_code}"
+    elif stock_code.startswith(("0", "3")):
+        return f"sz{stock_code}"
+    else:
+        raise ValueError(
+            f"无法识别的A股股票代码: '{stock_code}'。应以上海'6'或深圳'0'、'3'开头。"
+        )
+
+
 def get_yfinance_ticker(stock_code: str) -> str:
     """
     根据A股股票代码判断并返回yfinance所需的ticker格式。
@@ -144,13 +176,13 @@ def get_yfinance_ticker(stock_code: str) -> str:
         )
 
 
-@cache_to_sqlite(debug=False, re_run=False)
+@cache_to_sqlite()
 @set_proxy()
 def get_daily_data_yfinance(
     stock_code: str, start_date: str, end_date: str
 ) -> pd.DataFrame:
     """
-    使用yfinance获取单只A股的日频行情数据，并格式化为指定样式。
+    使用yfinance获取单只A股的日频行情数据 并格式化为指定样式。
 
     Args:
         stock_code (str): 6位数的A股股票代码.
@@ -158,7 +190,7 @@ def get_daily_data_yfinance(
         end_date (str): 结束日期, 格式 'YYYY-MM-DD' 或 'YYYYMMDD'.
 
     Returns:
-        pd.DataFrame: 包含格式化后日频数据的DataFrame，如果获取失败则返回空的DataFrame.
+        pd.DataFrame: 包含格式化后日频数据的DataFrame 如果获取失败则返回空的DataFrame.
     """
     try:
         # 1. 格式化yfinance的ticker
@@ -250,15 +282,17 @@ def get_intraday_data_for_date(
     stock_code: str, input_date: str, interval: str = "1m"
 ) -> pd.DataFrame:
     """
-    使用yfinance获取单只A股在指定某一天的分钟级别行情数据，主要用于绘图。
+    使用yfinance获取单只A股在指定某一天的分钟级别行情数据 主要用于绘图。
 
-    此函数专注于获取绘图所需的核心价量数据：时间、开高低收价格、成交量和估算成交额。
+    open	开盘价	在这一分钟的第一笔成交价格。
+    close	收盘价	在这一分钟的最后一笔成交价格。这也是绘制分时走势线时通常使用的价格点
+    volume	成交量	在这一分钟内，总共买卖的股票数量。单位是“股”
+    amount	成交额	在这一分钟内，总共买卖的股票金额。单位是“元”。它约等于 价格 * 成交量。
 
-    重要提示:
     - yfinance对历史分钟数据的获取有严格的日期范围限制。
     - '1m'间隔的数据通常只能获取最近7天。
     - 其他分钟间隔(如'5m', '15m')通常只能获取最近60天。
-    - 如果请求的日期超出限制或当天为非交易日，将返回空的DataFrame。
+    - 如果请求的日期超出限制或当天为非交易日 将返回空的DataFrame。
 
     Args:
         stock_code (str): 6位数字的A股股票代码。
@@ -266,7 +300,7 @@ def get_intraday_data_for_date(
         interval (str): 数据间隔, e.g., '1m', '5m', '15m', '30m', '60m'。
 
     Returns:
-        pd.DataFrame: 包含格式化后核心分钟数据的DataFrame，列包括：
+        pd.DataFrame: 包含格式化后核心分钟数据的DataFrame 列包括：
                       ['datetime', 'stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount']。
                       如果获取失败则返回空的DataFrame。
     """
@@ -308,12 +342,6 @@ def get_intraday_data_for_date(
         df.reset_index(inplace=True)
         # yfinance返回的列名可能是 'Datetime' 或 'index'
 
-        """
-        open	开盘价	在这一分钟的第一笔成交价格。
-        close	收盘价	在这一分钟的最后一笔成交价格。这也是绘制分时走势线时通常使用的价格点
-        volume	成交量	在这一分钟内，总共买卖的股票数量。单位是“股”
-        amount	成交额	在这一分钟内，总共买卖的股票金额。单位是“元”。它约等于 价格 * 成交量。
-        """
         df.rename(
             columns={
                 "Datetime": "datetime",
@@ -369,6 +397,64 @@ def get_intraday_data_for_date(
         return pd.DataFrame()
 
 
+@cache_to_sqlite()
+def get_today_stock_data(stock_code: str) -> pd.DataFrame | None:
+    """
+    获取指定A股股票【仅当天】从开盘到现在的1分钟级别交易数据 并按要求格式化。
+
+    :param stock_code: 股票代码, 例如 '603678'
+    :return: 包含当天分钟级别交易数据的 pandas.DataFrame 如果出错或无数据则返回 None
+    """
+    symbol = get_akshare_symbol(stock_code)
+
+    try:
+        trade_date_df = ak.tool_trade_date_hist_sina()
+        is_trade_day = datetime.now().strftime("%Y-%m-%d") in [
+            d.strftime("%Y-%m-%d") for d in trade_date_df["trade_date"]
+        ]
+
+        if not is_trade_day:
+            print(f"获取数据失败：今天是【非交易日】。")
+            return None
+
+        # 获取1分钟级别的数据
+        stock_minute_df = ak.stock_zh_a_minute(symbol=symbol, period="1", adjust="")
+
+        if stock_minute_df.empty:
+            print(
+                f"未能获取到股票 {stock_code} 的数据。请检查代码是否正确或当前是否为开盘后的交易时间。"
+            )
+            return None
+
+        columns_map = {
+            "day": "datetime",
+            "open": "open",
+            "high": "high",
+            "low": "low",
+            "close": "close",
+            "volume": "volume",
+        }
+        stock_minute_df = stock_minute_df.rename(columns=columns_map)
+        stock_minute_df["datetime"] = pd.to_datetime(stock_minute_df["datetime"])
+
+        today_date = datetime.now().date()
+        today_mask = stock_minute_df["datetime"].dt.date == today_date
+        stock_minute_df = stock_minute_df[today_mask]
+
+        if stock_minute_df.empty:
+            print(f"在获取到的数据中，未能找到属于今天({today_date})的记录。")
+            return None
+
+        desired_columns = ["datetime", "open", "high", "low", "close", "volume"]
+        stock_minute_df = stock_minute_df[desired_columns].copy()
+
+        return stock_minute_df
+
+    except Exception as e:
+        print(f"获取股票 {stock_code} 数据时发生错误: {e}")
+        return None
+
+
 if __name__ == "__main__":
     """
     uv run z_utils/stock_utils.py
@@ -376,7 +462,5 @@ if __name__ == "__main__":
     stock_code = "603678"
     input_date = "2025-07-02"
     start_data, end_data = "2025-07-22", "2025-07-23"
-    # df = get_daily_data_yfinance(stock_code, start_data, end_data)
-    # print(colored(f"{df}", "light_yellow"))
-    df = get_intraday_data_for_date(stock_code, input_date)
+    df = get_daily_data_yfinance(stock_code, start_data, end_data)
     print(colored(f"{df}", "light_yellow"))
