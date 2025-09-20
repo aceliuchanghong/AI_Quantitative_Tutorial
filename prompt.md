@@ -334,19 +334,244 @@ if __name__ == "__main__":
 
 ---
 
+我拥有某支股票完整的历史分钟级交易数据（包括开盘价、最高价、最低价、收盘价、成交量、波动率及时间特征等），希望构建一个滚动时间序列预测模型：以过去连续5个交易日中每天上午（9:30–11:30）和下午（13:00–15:00）两个时段各自聚合形成的“半日K线”数据作为输入特征（共10个样本），首先预测目标日A上午时段的价格最大值与最小值；随后，将刚预测完的A日上午数据纳入输入窗口，结合前4.5天的数据（即从A-5下午至A日上午），预测A日下午时段的价格极值。完成预测后，将A日全天数据加入历史序列，滑动窗口向前滚动一日，循环执行上述预测流程，实现持续滚动预测。
 
+---
+
+
+设股票历史分钟级交易数据按交易日划分为上午时段（9:30–11:30，记为 am）与下午时段（13:00–15:00，记为 pm），每个半日时段可聚合为一个特征向量 $\mathbf{x}_t^{(s)} \in \mathbb{R}^d$，其中 $t$ 表示交易日索引，$s \in \{\text{am}, \text{pm}\}$ 表示时段，$d$ 为特征维度（如 OHLCV、波动率、时间编码等）。给定滑动窗口内最近 5 个交易日的 10 个半日样本序列：  
+$$
+\mathcal{X}_{t-5:t-1} = \left\{ \mathbf{x}_{t-5}^{\text{am}}, \mathbf{x}_{t-5}^{\text{pm}}, \mathbf{x}_{t-4}^{\text{am}}, \mathbf{x}_{t-4}^{\text{pm}}, \dots, \mathbf{x}_{t-1}^{\text{am}}, \mathbf{x}_{t-1}^{\text{pm}} \right\}
+$$  
+模型首先预测目标日 $t$ 上午时段的价格极值：  
+$$
+\hat{y}_t^{\text{am}} = \left( \hat{H}_t^{\text{am}}, \hat{L}_t^{\text{am}} \right) = f_{\theta} \left( \mathcal{X}_{t-5:t-1} \right)
+$$  
+随后，将刚预测完成的 $\mathbf{x}_t^{\text{am}}$（或实际观测值）纳入输入，构建新窗口：  
+$$
+\mathcal{X}_{t-4.5:t} = \left\{ \mathbf{x}_{t-5}^{\text{pm}}, \mathbf{x}_{t-4}^{\text{am}}, \mathbf{x}_{t-4}^{\text{pm}}, \dots, \mathbf{x}_{t-1}^{\text{pm}}, \mathbf{x}_{t}^{\text{am}} \right\}
+$$  
+并预测当日下午极值：  
+$$
+\hat{y}_t^{\text{pm}} = \left( \hat{H}_t^{\text{pm}}, \hat{L}_t^{\text{pm}} \right) = f_{\theta} \left( \mathcal{X}_{t-4.5:t} \right)
+$$  
+完成预测后，将全天数据 $\left( \mathbf{x}_t^{\text{am}}, \mathbf{x}_t^{\text{pm}} \right)$ 并入历史序列，窗口前移一日，递推至 $t+1$，实现滚动预测：  
+$$
+t \leftarrow t+1, \quad \text{重复上述过程}
+$$  
+
+我们先考虑没有股市黑天鹅世间:
+1. 我的训练数据应该长什么样?
+2. 输入数据是给定滑动窗口内最近 5 个交易日的 10 个半日样本序列 是否足够?
+3. 什么模型架构可行呢?
+4. 是否有类似的想法的项目?
+
+---
+
+设某股票历史分钟级交易数据按交易日划分为上午时段（9:30–11:30，记为 $\text{am}$）与下午时段（13:00–15:00，记为 $\text{pm}$），每个半日可聚合为特征向量 $\mathbf{x}_t^{(s)} \in \mathbb{R}^d$，其中 $t \in \mathbb{N}$ 为交易日索引，$s \in \{\text{am}, \text{pm}\}$ 表示时段。特征维度 $d$ 包含基础行情（OHLCV）、技术指标（如 $\text{RSI}_t^{(s)}, \text{MACD}_t^{(s)}$）、订单簿失衡度、已实现波动率 等衍生特征, $\sigma_t^{(s)}$、时间编码 $\tau_t^{(s)}$（加入星期几、是否月末、节假日前等时间编码等），并可叠加长窗口（20日的特征统计量（均值、std、z-score）等）全局统计量：  
+$$
+\boldsymbol{\mu}_{t}^{(s)} = \frac{1}{20} \sum_{k=1}^{20} \mathbf{x}_{t-k}^{(s)}, \quad
+\boldsymbol{\sigma}_{t}^{(s)} = \sqrt{ \frac{1}{19} \sum_{k=1}^{20} \left( \mathbf{x}_{t-k}^{(s)} - \boldsymbol{\mu}_{t}^{(s)} \right)^2 }, \quad
+\mathbf{z}_{t}^{(s)} = \frac{ \mathbf{x}_{t}^{(s)} - \boldsymbol{\mu}_{t}^{(s)} }{ \boldsymbol{\sigma}_{t}^{(s)} }
+$$  
+同时引入外部协变量 $\mathbf{c}_t^{(s)} \in \mathbb{R}^{d_c}$，包含大盘指数、行业板块动量、相关股票同期特征等。模型基于滑动窗口内最近5个交易日的10个半日样本序列  
+$$
+\mathcal{X}_{t-5:t-1} = \left\{ \mathbf{x}_{t-5}^{\text{am}}, \mathbf{x}_{t-5}^{\text{pm}}, \dots, \mathbf{x}_{t-1}^{\text{am}}, \mathbf{x}_{t-1}^{\text{pm}} \right\}
+$$  
+首先预测目标日 $t$ 上午极值：  
+$$
+\hat{y}_t^{\text{am}} = \left( \hat{H}_t^{\text{am}}, \hat{L}_t^{\text{am}} \right) = f_{\theta} \left( \mathcal{X}_{t-5:t-1};\, \boldsymbol{\mu}_{\cdot}, \boldsymbol{\sigma}_{\cdot}, \mathbf{c}_{\cdot} \right)
+$$  
+随后，将观测或预测得到的 $\mathbf{x}_t^{\text{am}}$ 纳入输入，构建新窗口  
+$$
+\mathcal{X}_{t-4.5:t} = \left\{ \mathbf{x}_{t-5}^{\text{pm}}, \mathbf{x}_{t-4}^{\text{am}}, \dots, \mathbf{x}_{t-1}^{\text{pm}}, \mathbf{x}_{t}^{\text{am}} \right\}
+$$  
+并预测当日下午极值：  
+$$
+\hat{y}_t^{\text{pm}} = \left( \hat{H}_t^{\text{pm}}, \hat{L}_t^{\text{pm}} \right) = f_{\theta} \left( \mathcal{X}_{t-4.5:t};\, \boldsymbol{\mu}_{\cdot}, \boldsymbol{\sigma}_{\cdot}, \mathbf{c}_{\cdot} \right)
+$$  
+完成预测后，更新历史序列，窗口前移一日：  
+$$
+t \leftarrow t+1,\quad \mathcal{X}_{t-5:t-1} \leftarrow \mathcal{X}_{t-4.5:t} \cup \left\{ \mathbf{x}_{t}^{\text{pm}} \right\} \setminus \left\{ \mathbf{x}_{t-5}^{\text{am}} \right\}
+$$  
+实现滚动递推预测，支持动态融入全局上下文与市场协同信息。
+
+---
+
+你说得非常对 —— 在原始描述中，虽然提到了“时间编码”和“20日统计量”，但并未将其**显式整合进模型输入结构**，也未说明这些全局/时变特征如何随滚动窗口动态更新。此外，还缺少对**特征工程完整输入向量构成**、**模型输入张量结构**、以及**滚动过程中统计量与时间编码的同步更新机制**的清晰表达。
+
+---
+
+我在想构建一个**滚动递推的半日级极值预测系统**，基于股票历史分钟级数据，每日分上午（9:30–11:30, $\text{am}$）与下午（13:00–15:00, $\text{pm}$）两个时段，聚合为特征向量：
+
+$$
+\mathbf{x}_t^{(s)} = \left[ \text{OHLCV}, \text{RSI}, \text{MACD}, \sigma_{\text{realized}}, \dots \right]^\top \in \mathbb{R}^{d_0}
+$$
+
+并**增强输入特征**为：
+
+$$
+\mathbf{\tilde{x}}_t^{(s)} = \left[ \mathbf{x}_t^{(s)}; \mathbf{z}_t^{(s)}; \boldsymbol{\tau}_t^{(s)} \right] \in \mathbb{R}^d, \quad d = d_0 + d_0 + d_\tau
+$$
+
+其中：
+
+1. **原始行情与技术特征**：$\mathbf{x}_t^{(s)} \in \mathbb{R}^{d_0}$  
+   → 例如 OHLCV、RSI、MACD、波动率等，维度为 $d_0$
+
+2. **标准化后的 z-score 特征**：$\mathbf{z}_t^{(s)} \in \mathbb{R}^{d_0}$  
+   → 和原始特征一一对应，是对 $\mathbf{x}_t^{(s)}$ 的标准化版本，维度也为 $d_0$
+
+3. **时间编码特征**：$\boldsymbol{\tau}_t^{(s)} \in \mathbb{R}^{d_\tau}$  
+   → 如星期几、是否月末、节假日标记等，维度为 $d_\tau$
+
+所以拼接后的总维度是：
+
+> 原始特征维度 + 标准化特征维度 + 时间编码维度 = $d_0 + d_0 + d_\tau$
+
+- $\mathbf{z}_t^{(s)} = \dfrac{ \mathbf{x}_t^{(s)} - \boldsymbol{\mu}_t^{(s)} }{ \boldsymbol{\sigma}_t^{(s)} }$ 为**20日滚动标准化特征**（$\boldsymbol{\mu}_t^{(s)}, \boldsymbol{\sigma}_t^{(s)}$ 基于 $t-20$ 至 $t-1$ 计算）；
+- $\boldsymbol{\tau}_t^{(s)} \in \mathbb{R}^{d_\tau}$ 为**结构化时间编码**，包含：
+  - 星期几（one-hot），
+  - 是否月末前3日（布尔），
+  - 是否节假日前/后1日（布尔），
+  - 时段标识（am/pm, 1维），
+  - 交易日序号模周期（如月内第几个交易日）等；
+
+同时引入外部协变量 $\mathbf{c}_t^{(s)} \in \mathbb{R}^{d_c}$（如大盘指数收益率、行业动量、关联个股特征等），最终模型输入为：
+
+$$
+\mathbf{u}_t^{(s)} = \left[ \mathbf{\tilde{x}}_t^{(s)}; \mathbf{c}_t^{(s)} \right] \in \mathbb{R}^{d + d_c}
+$$
+
+**预测流程采用两阶段滚动机制：**
+
+1. **上午预测（$t$ 日 am）**：输入最近5个交易日共10个半日样本：
+   $$
+   \mathcal{U}_{t-5:t-1} = \left\{ \mathbf{u}_{t-5}^{\text{am}}, \mathbf{u}_{t-5}^{\text{pm}}, \dots, \mathbf{u}_{t-1}^{\text{am}}, \mathbf{u}_{t-1}^{\text{pm}} \right\}
+   $$
+   预测目标：
+   $$
+   \hat{y}_t^{\text{am}} = \left( \hat{H}_t^{\text{am}}, \hat{L}_t^{\text{am}} \right) = f_\theta \left( \mathcal{U}_{t-5:t-1} \right)
+   $$
+
+2. **下午预测（$t$ 日 pm）**：将上午预测值或真实观测值 $\mathbf{u}_t^{\text{am}}$ 加入窗口，形成“4.5天+0.5天”序列：
+   $$
+   \mathcal{U}_{t-4.5:t} = \left\{ \mathbf{u}_{t-5}^{\text{pm}}, \mathbf{u}_{t-4}^{\text{am}}, \dots, \mathbf{u}_{t-1}^{\text{pm}}, \mathbf{u}_{t}^{\text{am}} \right\}
+   $$
+   预测目标：
+   $$
+   \hat{y}_t^{\text{pm}} = \left( \hat{H}_t^{\text{pm}}, \hat{L}_t^{\text{pm}} \right) = f_\theta \left( \mathcal{U}_{t-4.5:t} \right)
+   $$
+
+3. **滚动更新机制**：完成 $t$ 日预测后：
+   - 若使用真实数据，将 $\mathbf{u}_t^{\text{pm}}$ 加入历史；
+   - 同步更新 $\boldsymbol{\mu}_{t+1}^{(s)}, \boldsymbol{\sigma}_{t+1}^{(s)}$（滑动窗口移除 $t-20$，加入 $t$）；
+   - 更新 $\boldsymbol{\tau}_{t+1}^{(s)}$ 依据日历与交易日历；
+   - 窗口前移：
+     $$
+     \mathcal{U}_{t-4:t} \leftarrow \left( \mathcal{U}_{t-4.5:t} \setminus \{ \mathbf{u}_{t-5}^{\text{am}} \} \right) \cup \{ \mathbf{u}_{t}^{\text{pm}} \}, \quad t \leftarrow t + 1
+     $$
+
+实现**时序感知 + 统计归一化 + 时间结构编码 + 市场协同驱动 + 滚动自更新**的完整闭环预测系统，用于金融时序的极值滚动预测任务。
 
 
 ---
 
 
+为实现对股票日内价格极值（高点/低点）的精准滚动预测，我们设计一个**时序感知 + 统计归一化 + 时间结构编码 + 市场协同驱动 + 滚动自更新**的闭环预测系统。该系统基于历史分钟级数据，以半日（上午 9:30–11:30，下午 13:00–15:00）为基本预测单元，构建滚动递推预测机制。
 
----
+首先，对每个半日时段 $ s \in \{ \text{am}, \text{pm} \} $，基于分钟级数据聚合形成原始特征向量：
+
+$$
+\mathbf{x}_t^{(s)} = \left[ \text{OHLCV}, \text{RSI}, \text{MACD}, \sigma_{\text{realized}}, \dots \right]^\top \in \mathbb{R}^{d_0}
+$$
+
+其中包含价格、成交量、技术指标与波动率等，维度为 $ d_0 $。
+
+为进一步提升模型泛化能力，我们**增强输入特征**，构造：
+
+$$
+\mathbf{\tilde{x}}_t^{(s)} = \left[ \mathbf{x}_t^{(s)}; \mathbf{z}_t^{(s)}; \boldsymbol{\tau}_t^{(s)} \right] \in \mathbb{R}^d, \quad d = d_0 + d_0 + d_\tau
+$$
+
+该增强向量由三部分拼接而成：
+
+1. **原始行情与技术特征**：$\mathbf{x}_t^{(s)} \in \mathbb{R}^{d_0}$  
+   → 包含 OHLCV、RSI、MACD、已实现波动率等，维度为 $ d_0 $
+
+2. **标准化后的 z-score 特征**：$\mathbf{z}_t^{(s)} \in \mathbb{R}^{d_0}$  
+   → 与原始特征一一对应，为滚动标准化版本：
+   $$
+   \mathbf{z}_t^{(s)} = \dfrac{ \mathbf{x}_t^{(s)} - \boldsymbol{\mu}_t^{(s)} }{ \boldsymbol{\sigma}_t^{(s)} }
+   $$
+   其中均值与标准差基于最近20个交易日（$t-20$ 至 $t-1$）滚动计算，确保统计稳定性。
+
+3. **时间编码特征**：$\boldsymbol{\tau}_t^{(s)} \in \mathbb{R}^{d_\tau}$  
+   → 引入结构性时间信息，包含：
+   - 星期几（one-hot 编码），
+   - 是否月末前3日（布尔标记），
+   - 是否节假日前/后1日（布尔标记），
+   - 时段标识（am/pm，1维），
+   - 月内交易日序号（模周期编码）等。
+
+因此，增强特征总维度为：
+> $ d = d_0 + d_0 + d_\tau $
+
+为捕捉市场整体动量与行业联动效应，我们进一步引入外部协变量：
+
+$$
+\mathbf{c}_t^{(s)} \in \mathbb{R}^{d_c}
+$$
+
+例如：大盘指数收益率、行业动量因子、关联个股特征、资金流指标等。
+
+最终，模型输入向量为：
+
+$$
+\mathbf{u}_t^{(s)} = \left[ \mathbf{\tilde{x}}_t^{(s)}; \mathbf{c}_t^{(s)} \right] \in \mathbb{R}^{d + d_c}
+$$
+
+预测采用**上午 → 下午 → 滚动更新**的两阶段递推结构，确保信息流与时序一致性。
+
+输入：最近5个交易日（共10个半日）的历史特征序列：
+
+$$
+\mathcal{U}_{t-5:t-1} = \left\{ \mathbf{u}_{t-5}^{\text{am}}, \mathbf{u}_{t-5}^{\text{pm}}, \dots, \mathbf{u}_{t-1}^{\text{am}}, \mathbf{u}_{t-1}^{\text{pm}} \right\}
+$$
+
+输出：预测上午时段极值：
+
+$$
+\hat{y}_t^{\text{am}} = \left( \hat{H}_t^{\text{am}}, \hat{L}_t^{\text{am}} \right) = f_\theta \left( \mathcal{U}_{t-5:t-1} \right)
+$$
+
+在上午预测完成后，将上午时段的真实观测值（或预测值，视策略而定）$\mathbf{u}_t^{\text{am}}$ 加入输入窗口，形成“4.5天 + 0.5天”的滚动序列：
+
+$$
+\mathcal{U}_{t-4.5:t} = \left\{ \mathbf{u}_{t-5}^{\text{pm}}, \mathbf{u}_{t-4}^{\text{am}}, \dots, \mathbf{u}_{t-1}^{\text{pm}}, \mathbf{u}_{t}^{\text{am}} \right\}
+$$
+
+输出：预测下午时段极值：
+
+$$
+\hat{y}_t^{\text{pm}} = \left( \hat{H}_t^{\text{pm}}, \hat{L}_t^{\text{pm}} \right) = f_\theta \left( \mathcal{U}_{t-4.5:t} \right)
+$$
+
+完成 $t$ 日预测后，系统执行以下更新操作，确保下一交易日预测的连续性与适应性：
+
+- **数据更新**：将 $t$ 日下午的真实观测 $\mathbf{u}_t^{\text{pm}}$ 加入历史序列；
+- **统计参数更新**：滑动窗口移除 $t-20$ 日数据，加入 $t$ 日数据，重新计算 $\boldsymbol{\mu}_{t+1}^{(s)}, \boldsymbol{\sigma}_{t+1}^{(s)}$；
+- **时间编码更新**：根据最新日历与交易日历，更新 $\boldsymbol{\tau}_{t+1}^{(s)}$；
+- **窗口前移**：
+  $$
+  \mathcal{U}_{t-4:t} \leftarrow \left( \mathcal{U}_{t-4.5:t} \setminus \{ \mathbf{u}_{t-5}^{\text{am}} \} \right) \cup \{ \mathbf{u}_{t}^{\text{pm}} \}, \quad t \leftarrow t + 1
+  $$
 
 
-
-
----
+进一步扩展，考虑：
+- 加入注意力机制或Transformer结构处理长序列依赖；
+- 引入不确定性估计（如分位数回归或贝叶斯神经网络）；
+- 支持多资产联合预测，建模跨市场联动。
 
 
 

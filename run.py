@@ -27,7 +27,7 @@ def draw_pics(
 ):
     """绘制从起始日期到截至日期每一日的分钟级别交易图片"""
     """
-    uv run run.py draw-pics --stock-code 603678 --start-date 2025-07-30 --end-date 2025-07-31
+    uv run run.py draw-pics --stock-code 603678 --start-date 2025-07-30 --end-date 2025-08-11
     uv run run.py draw-pics --stock-code 603678 --today --rerun
     
     uv run run.py draw-pics --stock-code 600258 --start-date 2025-07-07 --end-date 2025-08-05
